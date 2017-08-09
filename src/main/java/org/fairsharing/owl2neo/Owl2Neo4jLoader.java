@@ -94,7 +94,7 @@ public class Owl2Neo4jLoader {
         OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
 
 
-        File file = new File("");
+        File file = new File(cmd.getOptionValue("o").trim());
         try {
             OWLOntology ontology = manager.loadOntologyFromOntologyDocument(file);
             System.out.println("Loaded ontology" + ontology);
