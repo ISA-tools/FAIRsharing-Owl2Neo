@@ -145,7 +145,7 @@ public class Owl2Neo4jLoader {
             formatter.printHelp(Owl2Neo4jLoader.class.getSimpleName(), getOptions());
             System.exit(ERR_STATUS);
         }
-        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+
 
         try {
             System.out.println("Deleting graph database directory");
@@ -155,22 +155,27 @@ public class Owl2Neo4jLoader {
             System.err.println("Exception caught: " + e.getMessage());
         }
 
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(GRAPH_DB_PATH));
+        String[] owlFiles = cmd.getOptionValues("o");
 
-        File file = new File(cmd.getOptionValue("o").trim());
-        try {
-            OWLOntology ontology = manager.loadOntologyFromOntologyDocument(file);
-            OWLDataFactory factory = manager.getOWLDataFactory();
-            System.out.println("Loaded ontology" + ontology);
-            GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(GRAPH_DB_PATH));
-            Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb);
-            loader.importOntology(ontology, factory);
-            System.exit(OK_STATUS);
+        for (String filePath : owlFiles) {
+            File file = new File(filePath.trim());
+            try {
+                OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+                OWLOntology ontology = manager.loadOntologyFromOntologyDocument(file);
+                OWLDataFactory factory = manager.getOWLDataFactory();
+                System.out.println("Loaded ontology" + ontology);
+                ;
+                Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb);
+                loader.importOntology(ontology, factory);
+            }
+            catch (Exception e) {
+                System.err.println("Exception caught: " + e.getMessage());
+                e.printStackTrace();
+                System.exit(ERR_STATUS);
+            }
         }
-        catch (Exception e) {
-            System.err.println("Exception caught: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(ERR_STATUS);
-        }
+        System.exit(OK_STATUS);
 
     }
 
