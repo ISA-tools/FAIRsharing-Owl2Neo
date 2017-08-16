@@ -89,6 +89,7 @@ public class Owl2Neo4jLoader {
         }
         IRI iri = c.getIRI();
         String iriString = iri.getIRIString();
+        /*
         for (OWLAnnotationProperty property: OWLAPIStreamUtils.asList(c.annotationPropertiesInSignature())) {
             System.out.println("Annotation property: " + property);
         }
@@ -100,30 +101,41 @@ public class Owl2Neo4jLoader {
             System.out.println(literal.getLiteral());
             classLabel = literal.getLiteral();
         }
-        System.out.println("Current OWL class is: " + classString);
-        /*
-        Node classNode = getOrCreateWithUniqueFactory(classString);
-        classNode.setProperty("name", classLabel);
-        classNode.setProperty("iri", iriString);
         */
+
+        Node classNode = getOrCreateWithUniqueFactory(classString);
+        classNode.setProperty("iri", iriString);
+
+        EntitySearcher.getAnnotations(c, ontology, factory.getRDFSLabel()).forEach(annotation -> {
+            System.out.println("Annotation: " + annotation);
+            OWLAnnotationProperty property = annotation.getProperty();
+            System.out.println(property.toString());
+            OWLLiteral literal = (OWLLiteral) annotation.getValue();
+            System.out.println(literal.getLiteral());
+            classNode.setProperty("name", literal.getLiteral());
+        });
+        System.out.println("Current OWL class is: " + classString);
+
         NodeSet<OWLClass> superClasses = reasoner.getSubClasses(c, true);
 
-        /*
         if (superClasses.isEmpty()) {
             classNode.createRelationshipTo(thingNode, RelationshipType.withName(IS_A));
         }
         else {
+            Integer finalPosition = null;
             for (org.semanticweb.owlapi.reasoner.Node<OWLClass> parentOWLNode: superClasses) {
                 OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
                 String parentString = parent.toString();
                 if (parentString.contains(HASH)) {
-                    parentString = parentString.substring(classString.indexOf(HASH)+1, classString.indexOf(GREATER_THAN));
+                    finalPosition = classString.contains(GREATER_THAN) ? classString.indexOf(GREATER_THAN) : null;
+                    parentString = parentString.substring(classString.indexOf(HASH)+1, finalPosition);
                 }
                 Node parentNode = getOrCreateWithUniqueFactory(parentString);
                 parentNode.createRelationshipTo(classNode, RelationshipType.withName(PART_OF));
             }
         }
 
+        /*
         for (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual> ind : reasoner.getInstances(c, true)) {
             OWLNamedIndividual individual = ind.getRepresentativeElement();
             String individualString = individual.toString();
