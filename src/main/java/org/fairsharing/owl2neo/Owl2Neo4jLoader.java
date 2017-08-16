@@ -122,13 +122,12 @@ public class Owl2Neo4jLoader {
             classNode.createRelationshipTo(thingNode, RelationshipType.withName(IS_A));
         }
         else {
-            Integer finalPosition = null;
             for (org.semanticweb.owlapi.reasoner.Node<OWLClass> parentOWLNode: superClasses) {
                 OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
                 String parentString = parent.toString();
                 if (parentString.contains(HASH)) {
-                    finalPosition = classString.contains(GREATER_THAN) ? classString.indexOf(GREATER_THAN) : null;
-                    parentString = parentString.substring(classString.indexOf(HASH)+1, finalPosition);
+                    parentString = classString.contains(GREATER_THAN) ? parentString.substring(classString.indexOf(HASH)+1, classString.indexOf(GREATER_THAN))
+                        : parentString.substring(classString.indexOf(HASH)+1);
                 }
                 Node parentNode = getOrCreateWithUniqueFactory(parentString);
                 parentNode.createRelationshipTo(classNode, RelationshipType.withName(PART_OF));
