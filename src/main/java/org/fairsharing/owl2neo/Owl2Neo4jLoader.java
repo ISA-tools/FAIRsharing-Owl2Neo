@@ -275,7 +275,7 @@ public class Owl2Neo4jLoader {
                 OWLDataFactory factory = manager.getOWLDataFactory();
                 System.out.println("Loaded ontology" + ontology);
                 Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb, ontology, factory);
-                loader.importOntology();
+                loader.importOntology(false);
             }
             catch (Exception e) {
                 System.err.println("Exception caught: " + e.getMessage());
