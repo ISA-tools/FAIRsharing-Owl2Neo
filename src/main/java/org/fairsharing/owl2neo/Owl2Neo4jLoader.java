@@ -6,10 +6,12 @@ import org.apache.commons.io.FileUtils;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.UniqueFactory;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.semanticweb.HermiT.ReasonerFactory;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
+
 
 import org.semanticweb.owlapi.search.EntitySearcher;
 import org.semanticweb.owlapi.util.OWLAPIStreamUtils;
@@ -32,11 +34,24 @@ public class Owl2Neo4jLoader {
     private static final String GRAPH_DB_PATH = "var/graphdb";
     private static final String OWL_THING = "owl:Thing";
 
+    public static final String OPENLLET = "OPENLLET";
+    public static final String PELLET = "PELLET";
+    public static final String HERMIT = "HERMIT";
+    public static final String ELK = "ELK";
+
     private GraphDatabaseService graphDb;
+    private OWLOntology ontology;
+    private OWLDataFactory dataFactory;
+
+
+
+    private OWLReasoner reasoner;
 
     @Inject
-    public Owl2Neo4jLoader(GraphDatabaseService graphDb) {
+    public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
         this.graphDb = graphDb;
+        this.ontology = ontology;
+        this.dataFactory = dataFactory;
     }
 
     public GraphDatabaseService getGraphDb() {
@@ -45,6 +60,28 @@ public class Owl2Neo4jLoader {
 
     public void setGraphDb(GraphDatabaseService graphDb) {
         this.graphDb = graphDb;
+    }
+
+    public OWLReasoner getReasoner() {
+        return OpenlletReasonerFactory.getInstance().createReasoner(ontology);
+    }
+
+    public OWLReasoner getReasoner(String reasonerType) {
+        if (reasonerType.equalsIgnoreCase(OPENLLET) || reasonerType.equalsIgnoreCase(PELLET)) {
+            return OpenlletReasonerFactory.getInstance().createReasoner(ontology);
+        }
+        if (reasonerType.equalsIgnoreCase(HERMIT)) {
+            return (new ReasonerFactory()).createReasoner(ontology);
+        }
+        else return OpenlletReasonerFactory.getInstance().createReasoner(ontology);
+    }
+
+    public OWLOntology getOntology() {
+        return ontology;
+    }
+
+    public void setOntology(OWLOntology ontology) {
+        this.ontology = ontology;
     }
 
     private Node getOrCreateWithUniqueFactory(String nodeName) {
@@ -59,54 +96,115 @@ public class Owl2Neo4jLoader {
         return factory.getOrCreate("name", nodeName);
     }
 
-    public void importOntology(OWLOntology ontology, OWLDataFactory factory) throws Exception {
-        final OWLReasoner reasoner = OpenlletReasonerFactory.getInstance().createReasoner(ontology);
-        if (!reasoner.isConsistent()) {
-            throw new Exception("Ontology is inconsistent");
-        }
-        Transaction tx = graphDb.beginTx();
-        try {
-            Node thingNode = getOrCreateWithUniqueFactory(OWL_THING);
-            /*
-            for (OWLClass c : OWLAPIStreamUtils.asList(ontology.classesInSignature())) {
-                loadClassAsNode(ontology, factory, reasoner, thingNode, c);
-            }
-            */
-            ontology.classesInSignature().forEach(c -> loadClassAsNode(ontology, factory, reasoner, thingNode, c));
-            tx.success();
 
+
+    private void loadNodes(boolean inTransaction) throws Exception {
+        final OWLReasoner reasoner = getReasoner();
+        if (!reasoner.isConsistent()) throw new Exception("Ontology is inconsistent");
+
+        Transaction tx = inTransaction ? graphDb.beginTx() : null;
+
+        try {
+            getOrCreateWithUniqueFactory(OWL_THING);
+            ontology.classesInSignature().forEach((OWLClass c) -> {
+                String classString = c.toString(), classLabel = classString;
+                if (classString.contains(HASH)) {
+                    classString = classString.substring(classString.indexOf(HASH)+1, classString.lastIndexOf(GREATER_THAN));
+                }
+                IRI iri = c.getIRI();
+                String iriString = iri.getIRIString();
+
+                Node classNode = getOrCreateWithUniqueFactory(classString);
+                classNode.setProperty("iri", iriString);
+
+                EntitySearcher.getAnnotations(c, ontology, dataFactory.getRDFSLabel()).forEach(annotation -> {
+                    System.out.println("Annotation: " + annotation);
+                    OWLAnnotationProperty property = annotation.getProperty();
+                    System.out.println(property.toString());
+                    OWLLiteral literal = (OWLLiteral) annotation.getValue();
+                    System.out.println(literal.getLiteral());
+                    classNode.setProperty("name", literal.getLiteral());
+                });
+                System.out.println("Current OWL class is: " + classString);
+
+            });
+            if (tx != null) tx.success();
         }
         finally {
-            tx.close();
+            if (tx != null) tx.close();
         }
 
     }
 
-    private void loadClassAsNode(OWLOntology ontology, OWLDataFactory factory, OWLReasoner reasoner, Node thingNode, OWLClass c) {
+    private void loadLinks(boolean inTransaction) throws Exception {
+        final OWLReasoner reasoner = getReasoner();
+        if (!reasoner.isConsistent()) throw new Exception("Ontology is inconsistent");
+
+        Transaction tx = inTransaction ? graphDb.beginTx() : null;
+
+        try {
+            ontology.classesInSignature().forEach((OWLClass c) -> {
+                Node thingNode = getOrCreateWithUniqueFactory(OWL_THING);
+                String classString = c.toString(), classLabel = classString;
+                if (classString.contains(HASH)) {
+                    classString = classString.substring(classString.indexOf(HASH)+1, classString.lastIndexOf(GREATER_THAN));
+                }
+                Node classNode = getOrCreateWithUniqueFactory(classString);
+                NodeSet<OWLClass> superClasses = reasoner.getSuperClasses(c, true);
+
+                if (superClasses.isEmpty()) {
+                    classNode.createRelationshipTo(thingNode, RelationshipType.withName(IS_A));
+                }
+                else {
+                    for (org.semanticweb.owlapi.reasoner.Node<OWLClass> parentOWLNode: superClasses) {
+                        OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
+                        String parentString = parent.toString();
+                        if (parentString.contains(HASH)) {
+                            parentString = parentString.substring(parentString.indexOf(HASH)+1, parentString.lastIndexOf(GREATER_THAN));
+                        }
+                        Node parentNode = getOrCreateWithUniqueFactory(parentString);
+                        classNode.createRelationshipTo(parentNode, RelationshipType.withName(PART_OF));
+                    }
+                }
+            });
+            if (tx != null) tx.success();
+        }
+        finally {
+            if (tx != null) tx.close();
+        }
+
+    }
+
+    public void importOntology(boolean inTransaction) throws Exception {
+        final OWLReasoner reasoner = getReasoner();
+        if (!reasoner.isConsistent()) {
+            throw new Exception("Ontology is inconsistent");
+        }
+        Transaction tx = inTransaction ? graphDb.beginTx() : null;
+        try {
+            Node thingNode = getOrCreateWithUniqueFactory(OWL_THING);
+            ontology.classesInSignature().forEach(c -> loadClassAsNode(reasoner, thingNode, c));
+            if (tx != null) tx.success();
+
+        }
+        finally {
+            if (tx != null) tx.close();
+        }
+
+    }
+
+    private void loadClassAsNode(OWLReasoner reasoner, Node thingNode, OWLClass c) {
         String classString = c.toString(), classLabel = classString;
         if (classString.contains(HASH)) {
             classString = classString.substring(classString.indexOf(HASH)+1, classString.indexOf(GREATER_THAN));
         }
         IRI iri = c.getIRI();
         String iriString = iri.getIRIString();
-        /*
-        for (OWLAnnotationProperty property: OWLAPIStreamUtils.asList(c.annotationPropertiesInSignature())) {
-            System.out.println("Annotation property: " + property);
-        }
-        for (OWLAnnotation annotation: OWLAPIStreamUtils.asList(EntitySearcher.getAnnotations(c, ontology, factory.getRDFSLabel()))) {
-            System.out.println("Annotation: " + annotation);
-            OWLAnnotationProperty property = annotation.getProperty();
-            System.out.println(property.toString());
-            OWLLiteral literal = (OWLLiteral) annotation.getValue();
-            System.out.println(literal.getLiteral());
-            classLabel = literal.getLiteral();
-        }
-        */
 
         Node classNode = getOrCreateWithUniqueFactory(classString);
         classNode.setProperty("iri", iriString);
 
-        EntitySearcher.getAnnotations(c, ontology, factory.getRDFSLabel()).forEach(annotation -> {
+        EntitySearcher.getAnnotations(c, ontology, dataFactory.getRDFSLabel()).forEach(annotation -> {
             System.out.println("Annotation: " + annotation);
             OWLAnnotationProperty property = annotation.getProperty();
             System.out.println(property.toString());
@@ -116,7 +214,7 @@ public class Owl2Neo4jLoader {
         });
         System.out.println("Current OWL class is: " + classString);
 
-        NodeSet<OWLClass> superClasses = reasoner.getSubClasses(c, true);
+        NodeSet<OWLClass> superClasses = reasoner.getSuperClasses(c, true);
 
         if (superClasses.isEmpty()) {
             classNode.createRelationshipTo(thingNode, RelationshipType.withName(IS_A));
@@ -126,20 +224,12 @@ public class Owl2Neo4jLoader {
                 OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
                 String parentString = parent.toString();
                 if (parentString.contains(HASH)) {
-                    parentString = classString.contains(GREATER_THAN) ? parentString.substring(classString.indexOf(HASH)+1, classString.indexOf(GREATER_THAN))
-                        : parentString.substring(classString.indexOf(HASH)+1);
+                    parentString = parentString.substring(parentString.indexOf(HASH)+1, parentString.indexOf(GREATER_THAN));
                 }
                 Node parentNode = getOrCreateWithUniqueFactory(parentString);
-                parentNode.createRelationshipTo(classNode, RelationshipType.withName(PART_OF));
+                classNode.createRelationshipTo(parentNode, RelationshipType.withName(PART_OF));
             }
         }
-
-        /*
-        for (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual> ind : reasoner.getInstances(c, true)) {
-            OWLNamedIndividual individual = ind.getRepresentativeElement();
-            String individualString = individual.toString();
-            System.out.println("Current individual is: " + individualString);
-        } */
     }
 
     protected static Options getOptions() {
@@ -184,8 +274,8 @@ public class Owl2Neo4jLoader {
                 OWLOntology ontology = manager.loadOntologyFromOntologyDocument(file);
                 OWLDataFactory factory = manager.getOWLDataFactory();
                 System.out.println("Loaded ontology" + ontology);
-                Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb);
-                loader.importOntology(ontology, factory);
+                Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb, ontology, factory);
+                loader.importOntology();
             }
             catch (Exception e) {
                 System.err.println("Exception caught: " + e.getMessage());
