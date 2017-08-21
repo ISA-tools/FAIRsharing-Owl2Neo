@@ -23,6 +23,9 @@ dependencies {
     // https://mvnrepository.com/artifact/org.neo4j/neo4j
     compile group: 'org.neo4j', name: 'neo4j', version: '3.2.3'
 
+    // https://mvnrepository.com/artifact/org.neo4j/neo4j-lucene-index
+    // compile group: 'org.neo4j', name: 'neo4j-lucene-index', version: '3.2.3'
+
     // https://mvnrepository.com/artifact/net.sourceforge.owlapi/owlapi-distribution
     compile group: 'net.sourceforge.owlapi', name: 'owlapi-distribution', version: '5.1.1'
 
@@ -49,6 +52,10 @@ buildscript {
         classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.1'
     }
 }
+/*
+jar {
+    from ('./src/main/resources') include 'META-INF/services/org.neo4j.kernel.extension.KernelExtensio‌​nFactory'
+} */
 
 apply plugin: 'com.github.johnrengelman.shadow'
 apply plugin: 'java'
