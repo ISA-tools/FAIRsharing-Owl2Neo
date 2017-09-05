@@ -33,7 +33,8 @@ public class Owl2Neo4jLoader {
     private static final String IS_A = "isA";
     private static final String PART_OF = "partOf";
 
-    private static final String GRAPH_DB_PATH = "var/graphdb";
+    public static final String GRAPH_DB_PATH = "var/fairsharing-ont-lite.db";
+    // private static final String GRAPH_DB_PATH = "neo4j-community-3.2.3/data/fairsharing-ont.db";
     private static final String OWL_THING = "owl:Thing";
 
     public static final String OPENLLET = "OPENLLET";
@@ -182,16 +183,18 @@ public class Owl2Neo4jLoader {
     }
 
     public Node getOrCreateOwlThing() {
+        /*
         Transaction tx = graphDb.beginTx();
         try {
-            tx = graphDb.beginTx();
+            tx = graphDb.beginTx(); */
             Node thingNode = getOrCreateWithUniqueFactory(OWL_THING);
-            tx.success();
+            // tx.success();
             return thingNode;
+        /*
         }
         finally {
             tx.close();
-        }
+        }*/
     }
 
     public void importOntology(boolean inTransaction) throws Exception {
@@ -199,19 +202,30 @@ public class Owl2Neo4jLoader {
         if (!reasoner.isConsistent()) {
             throw new Exception("Ontology is inconsistent");
         }
-        Node thingNode = getOrCreateOwlThing();
+        Transaction tx = graphDb.beginTx();
+        try {
+            Node thingNode = getOrCreateOwlThing();
 
-        final AtomicInteger counter = new AtomicInteger();
-        long totalCount  = ontology.classesInSignature().count();
-        System.out.println("Total count is: " + totalCount);
-        ontology.classesInSignature().forEach(c -> {
-            long start = System.nanoTime();
-            loadClassAsNode(reasoner, thingNode, c);
-            long end = System.nanoTime();
-            double duration = end - start / 1000000;
-            System.out.println("Duration of current iteration is:" + duration + " ms");
-            System.out.println("Done item #" + counter.incrementAndGet());
-        });
+            final AtomicInteger counter = new AtomicInteger();
+            long totalCount = ontology.classesInSignature().count();
+            System.out.println("Total count is: " + totalCount);
+            ontology.classesInSignature().forEach(c -> {
+                long start = System.nanoTime();
+                loadClassAsNode(reasoner, thingNode, c);
+                long end = System.nanoTime();
+                double duration = end - start / 1000000;
+                System.out.println("Duration of current iteration is:" + duration + " ms");
+                System.out.println("Done item #" + counter.incrementAndGet());
+            });
+            tx.success();
+        }
+        catch (Exception e) {
+            System.err.println("Owch, shucks, exception thrown:" + e.getMessage());
+            e.printStackTrace();
+        }
+        finally {
+            tx.close();
+        }
 
     }
 
@@ -223,8 +237,8 @@ public class Owl2Neo4jLoader {
         IRI iri = c.getIRI();
         String iriString = iri.getIRIString();
 
-        Transaction tx = graphDb.beginTx();
-        try {
+        // Transaction tx = graphDb.beginTx();
+        // try {
             Node classNode = getOrCreateWithUniqueFactory(classString);
             classNode.setProperty("iri", iriString);
 
@@ -253,11 +267,12 @@ public class Owl2Neo4jLoader {
                     classNode.createRelationshipTo(parentNode, RelationshipType.withName(PART_OF));
                 }
             }
+        /*
             tx.success();
         }
         finally {
             tx.close();
-        }
+        }*/
     }
 
     protected static Options getOptions() {
@@ -311,6 +326,24 @@ public class Owl2Neo4jLoader {
                 System.exit(ERR_STATUS);
             }
         }
+        /*
+        String query = "MATCH (n) RETURN n ORDER BY ID(n) DESC LIMIT 30;";
+        try (Result result = graphDb.execute(query)) {
+            while (result.hasNext()) {
+                Map<String, Object> row = result.next();
+                for (String key : result.columns()) {
+                    Node node = (Node) row.get(key);
+                    Object name = node.getProperty("name");
+                    System.out.printf("%s = %s; name = %s%n", key, row.get(key), name);
+                }
+
+            }
+        }
+        catch (Exception e) {
+            System.err.println("Exception caught: " + e.getMessage());
+            e.printStackTrace();
+        } */
+        System.out.println("Exiting with success...");
         System.exit(OK_STATUS);
 
     }
