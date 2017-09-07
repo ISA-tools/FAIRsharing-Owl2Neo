@@ -34,7 +34,7 @@ public class Owl2Neo4jLoader {
     private static final String PART_OF = "partOf";
 
     public static final String GRAPH_DB_PATH = "var/fairsharing-ont-lite.db";
-    // private static final String GRAPH_DB_PATH = "neo4j-community-3.2.3/data/fairsharing-ont.db";
+    // public static final String GRAPH_DB_PATH = "neo4j-community-3.2.3/data/fairsharing-ont.db";
     private static final String OWL_THING = "owl:Thing";
 
     public static final String OPENLLET = "OPENLLET";
@@ -280,6 +280,9 @@ public class Owl2Neo4jLoader {
         ontologyPath.setRequired(true);
         Options options = new Options();
         options.addOption(ontologyPath);
+        Option dbPath = new Option("d", "db-path", true, "The local location of the database");
+        dbPath.setRequired(false);
+        options.addOption(dbPath);
         return options;
     }
 
@@ -306,7 +309,8 @@ public class Owl2Neo4jLoader {
             System.err.println("Exception caught: " + e.getMessage());
         }
 
-        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(GRAPH_DB_PATH));
+        String graphDbPath = cmd.getOptionValue("d", Owl2Neo4jLoader.GRAPH_DB_PATH);
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(graphDbPath));
         String[] owlFiles = cmd.getOptionValues("o");
 
         for (String filePath : owlFiles) {

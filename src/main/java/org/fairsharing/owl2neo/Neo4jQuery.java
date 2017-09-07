@@ -1,5 +1,6 @@
 package org.fairsharing.owl2neo;
 
+import org.apache.commons.cli.*;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Result;
@@ -13,9 +14,32 @@ public class Neo4jQuery {
 
     private static final int OK_STATUS = 0;
     private static final int ERR_STATUS = 1;
+
+    protected static Options getOptions() {
+        Option dbPath = new Option("d", "db-path", true, "The local location of the database");
+        dbPath.setRequired(false);
+        Options options = new Options();
+        options.addOption(dbPath);
+        return options;
+    }
+
     public static void main(String[] args) {
 
-        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(Owl2Neo4jLoader.GRAPH_DB_PATH));
+        CommandLineParser parser = new DefaultParser();
+        CommandLine cmd = null;
+
+        try {
+            cmd =  parser.parse(getOptions(), args);
+        } catch (ParseException e) {
+            System.err.println(e.getMessage());
+            e.printStackTrace();
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp(Owl2Neo4jLoader.class.getSimpleName(), getOptions());
+            System.exit(ERR_STATUS);
+        }
+
+        String graphDbPath = cmd.getOptionValue("d", Owl2Neo4jLoader.GRAPH_DB_PATH);
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(graphDbPath));
         String query = "MATCH (n) RETURN n ORDER BY ID(n) DESC LIMIT 30;";
         Transaction tx = graphDb.beginTx();
         try {
