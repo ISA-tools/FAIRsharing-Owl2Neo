@@ -20,6 +20,7 @@ import uk.ac.manchester.cs.jfact.JFactFactory;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,8 +46,6 @@ public class Owl2Neo4jLoader {
     private GraphDatabaseService graphDb;
     private OWLOntology ontology;
     private OWLDataFactory dataFactory;
-
-
 
     private OWLReasoner reasoner;
 
@@ -103,7 +102,15 @@ public class Owl2Neo4jLoader {
         return factory.getOrCreate("name", nodeName);
     }
 
+    private void loadAnnotationProperties() throws Exception {
+        final OWLReasoner reasoner = getReasoner();
+        if (!reasoner.isConsistent()) throw new Exception("Ontology is inconsistent");
 
+        ontology.annotationPropertiesInSignature().forEach((OWLAnnotationProperty ap) -> {
+            System.out.println("Annotation property:" + ap);
+        });
+
+    }
 
     private void loadNodes() throws Exception {
         final OWLReasoner reasoner = getReasoner();
@@ -197,11 +204,17 @@ public class Owl2Neo4jLoader {
         }*/
     }
 
-    public void importOntology(boolean inTransaction) throws Exception {
+    public void importOntology(String label) throws Exception {
         final OWLReasoner reasoner = getReasoner();
         if (!reasoner.isConsistent()) {
             throw new Exception("Ontology is inconsistent");
         }
+
+        //load declared OWLAnnotationProperties
+        ontology.annotationPropertiesInSignature().forEach((OWLAnnotationProperty ap) -> {
+            System.out.println("Annotation property:" + ap);
+        });
+
         Transaction tx = graphDb.beginTx();
         try {
             Node thingNode = getOrCreateOwlThing();
@@ -211,7 +224,7 @@ public class Owl2Neo4jLoader {
             System.out.println("Total count is: " + totalCount);
             ontology.classesInSignature().forEach(c -> {
                 long start = System.nanoTime();
-                loadClassAsNode(reasoner, thingNode, c);
+                loadClassAsNode(reasoner, thingNode, c, label);
                 long end = System.nanoTime();
                 double duration = end - start / 1000000;
                 System.out.println("Duration of current iteration is:" + duration + " ms");
@@ -229,7 +242,7 @@ public class Owl2Neo4jLoader {
 
     }
 
-    private void loadClassAsNode(OWLReasoner reasoner, Node thingNode, OWLClass c) {
+    private void loadClassAsNode(OWLReasoner reasoner, Node thingNode, OWLClass c, String label) {
         String classString = c.toString(), classLabel = classString;
         if (classString.contains(HASH)) {
             classString = classString.substring(classString.indexOf(HASH)+1, classString.indexOf(GREATER_THAN));
@@ -241,6 +254,7 @@ public class Owl2Neo4jLoader {
         // try {
             Node classNode = getOrCreateWithUniqueFactory(classString);
             classNode.setProperty("iri", iriString);
+            classNode.addLabel(Label.label(label));
 
             EntitySearcher.getAnnotations(c, ontology, dataFactory.getRDFSLabel()).forEach(annotation -> {
                 System.out.println("Annotation: " + annotation);
@@ -286,6 +300,14 @@ public class Owl2Neo4jLoader {
         return options;
     }
 
+    protected static String determineLabel(String filename) {
+        filename = filename.toLowerCase();
+        if (filename.contains("disciplines")) return "DISCIPLINE";
+        if (filename.contains("fairsharing")) return "DOMAIN";
+        if (filename.contains("taxon")) return "SPECIES";
+        else return "GENERIC";
+    }
+
     public static void main(String[] args) {
 
         CommandLineParser parser = new DefaultParser();
@@ -322,7 +344,9 @@ public class Owl2Neo4jLoader {
                 OWLDataFactory factory = manager.getOWLDataFactory();
                 System.out.println("Loaded ontology" + ontology);
                 Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb, ontology, factory);
-                loader.importOntology(false);
+                String label = determineLabel(filePath);
+                System.out.println("Label is: " + label);
+                loader.importOntology(label);
             }
             catch (Exception e) {
                 System.err.println("Exception caught: " + e.getMessage());
