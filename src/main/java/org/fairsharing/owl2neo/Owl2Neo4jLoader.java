@@ -14,14 +14,13 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 
 import org.semanticweb.owlapi.search.EntitySearcher;
-import org.semanticweb.owlapi.util.OWLAPIStreamUtils;
 import uk.ac.manchester.cs.jfact.JFactFactory;
 
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Owl2Neo4jLoader {
@@ -43,11 +42,15 @@ public class Owl2Neo4jLoader {
     public static final String HERMIT = "HERMIT";
     public static final String JFACT = "JFACT";
 
+    private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
+
     private GraphDatabaseService graphDb;
     private OWLOntology ontology;
     private OWLDataFactory dataFactory;
 
     private OWLReasoner reasoner;
+
+    private OWLAnnotationProperty oboAlternativeTerm;
 
     @Inject
     public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
@@ -88,6 +91,27 @@ public class Owl2Neo4jLoader {
 
     public void setOntology(OWLOntology ontology) {
         this.ontology = ontology;
+    }
+
+    public OWLAnnotationProperty getOboAlternativeTerm() {
+        return oboAlternativeTerm;
+    }
+
+    public void setOboAlternativeTerm(OWLAnnotationProperty oboAlternativeTerm) {
+        this.oboAlternativeTerm = oboAlternativeTerm;
+    }
+
+    public void loadOboAlternativeTermFromOntology() {
+        Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
+                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(OBO_ALTERNATIVE_TERM_IRI)).findFirst();
+        if (optional.isPresent()) {
+            System.out.println("OBO Alternative Term is: " + optional.get());
+            this.oboAlternativeTerm = optional.get();
+        }
+        else {
+            System.out.println("OBO Alternative Term not found in Ontology " + ontology);
+            this.oboAlternativeTerm = null;
+        }
     }
 
     private Node getOrCreateWithUniqueFactory(String nodeName) {
@@ -264,6 +288,11 @@ public class Owl2Neo4jLoader {
                 System.out.println(literal.getLiteral());
                 classNode.setProperty("name", literal.getLiteral());
             });
+
+            EntitySearcher.getAnnotations(c, ontology, oboAlternativeTerm).forEach(annotation -> {
+                System.out.println("Annotation: " + annotation);
+            });
+            
             System.out.println("Current OWL class is: " + classString);
 
             NodeSet<OWLClass> superClasses = reasoner.getSuperClasses(c, true);
@@ -346,6 +375,7 @@ public class Owl2Neo4jLoader {
                 Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb, ontology, factory);
                 String label = determineLabel(filePath);
                 System.out.println("Label is: " + label);
+                loader.loadOboAlternativeTermFromOntology();
                 loader.importOntology(label);
             }
             catch (Exception e) {
@@ -375,6 +405,7 @@ public class Owl2Neo4jLoader {
         System.exit(OK_STATUS);
 
     }
+
 
 
 }
