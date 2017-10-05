@@ -19,8 +19,7 @@ import uk.ac.manchester.cs.jfact.JFactFactory;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Owl2Neo4jLoader {
@@ -43,6 +42,7 @@ public class Owl2Neo4jLoader {
     public static final String JFACT = "JFACT";
 
     private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
+    private static final String FAIRSHARING_ALTERNATIVE_TERM = "http://www.fairsharing.org/fairsharing/FAIRO_0000001";
 
     private GraphDatabaseService graphDb;
     private OWLOntology ontology;
@@ -51,6 +51,7 @@ public class Owl2Neo4jLoader {
     private OWLReasoner reasoner;
 
     private OWLAnnotationProperty oboAlternativeTerm;
+    private List<OWLAnnotationProperty> alternativeTerms;
 
     @Inject
     public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
@@ -106,11 +107,18 @@ public class Owl2Neo4jLoader {
                 .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(OBO_ALTERNATIVE_TERM_IRI)).findFirst();
         if (optional.isPresent()) {
             System.out.println("OBO Alternative Term is: " + optional.get());
-            this.oboAlternativeTerm = optional.get();
+            oboAlternativeTerm = optional.get();
+            List<OWLAnnotationProperty> subproperties = new ArrayList<OWLAnnotationProperty>(Arrays.asList(
+                    EntitySearcher.getSubProperties(oboAlternativeTerm, ontology).toArray(OWLAnnotationProperty[]::new)));
+            alternativeTerms = new ArrayList<OWLAnnotationProperty>();
+            alternativeTerms.add(oboAlternativeTerm);
+            alternativeTerms.addAll(subproperties);
+            System.out.println("Alternative Terms are: " + optional.get());
+
         }
         else {
             System.out.println("OBO Alternative Term not found in Ontology " + ontology);
-            this.oboAlternativeTerm = null;
+            oboAlternativeTerm = null;
         }
     }
 
@@ -287,12 +295,38 @@ public class Owl2Neo4jLoader {
                 OWLLiteral literal = (OWLLiteral) annotation.getValue();
                 System.out.println(literal.getLiteral());
                 classNode.setProperty("name", literal.getLiteral());
+                classNode.setProperty("displayName", literal.getLiteral());
             });
 
-            EntitySearcher.getAnnotations(c, ontology, oboAlternativeTerm).forEach(annotation -> {
-                System.out.println("Annotation: " + annotation);
-            });
-            
+            List<String> alternativeNames = new ArrayList<String>();
+            for (OWLAnnotationProperty alternativeTerm : alternativeTerms) {
+
+                EntitySearcher.getAnnotations(c, ontology, alternativeTerm).forEach(annotation -> {
+                    System.out.println("Annotation alternative term: " + annotation);
+                    OWLLiteral literal = (OWLLiteral) annotation.getValue();
+                    String propetyIRIString = alternativeTerm.getIRI().getIRIString();
+                    switch (propetyIRIString) {
+                        case OBO_ALTERNATIVE_TERM_IRI:
+                            alternativeNames.add(literal.getLiteral());
+                            break;
+                        case FAIRSHARING_ALTERNATIVE_TERM:
+                            alternativeNames.add(literal.getLiteral());
+                            classNode.setProperty("displayName", literal.getLiteral());
+                            break;
+                        default:
+                            alternativeNames.add(literal.getLiteral());
+                    }
+                });
+
+            }
+            String alternativeNamesString = String.join(",", alternativeNames);
+            System.out.println("Alternative terms are: " + alternativeNamesString);
+            System.out.println("Display name is: " + classNode.getProperty("displayName", null));
+
+            // classNode.setProperty("alternativeNames", alternativeNamesString);
+
+            classNode.setProperty("alternativeNames", alternativeNames.toArray(new String[alternativeNames.size()]));
+
             System.out.println("Current OWL class is: " + classString);
 
             NodeSet<OWLClass> superClasses = reasoner.getSuperClasses(c, true);
