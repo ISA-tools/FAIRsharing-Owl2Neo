@@ -44,6 +44,10 @@ public class Owl2Neo4jLoader {
     private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
     private static final String FAIRSHARING_ALTERNATIVE_TERM = "http://www.fairsharing.org/fairsharing/FAIRO_0000001";
 
+    private static final String OIO_HAS_EXACT_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym";
+    private static final String OIO_HAS_RELATED_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym";
+    private static final String OIO_HAS_BROAD_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasBroadSynonym";
+
     private GraphDatabaseService graphDb;
     private OWLOntology ontology;
     private OWLDataFactory dataFactory;
@@ -52,6 +56,7 @@ public class Owl2Neo4jLoader {
 
     private OWLAnnotationProperty oboAlternativeTerm;
     private List<OWLAnnotationProperty> alternativeTerms;
+    private List<OWLAnnotationProperty> synonyms;
 
     @Inject
     public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
@@ -120,6 +125,16 @@ public class Owl2Neo4jLoader {
             System.out.println("OBO Alternative Term not found in Ontology " + ontology);
             oboAlternativeTerm = null;
         }
+    }
+
+    public List<OWLAnnotationProperty> loadOWLAnnotationPropertyFromOntologyByIriString(String iriString) {
+        List<OWLAnnotationProperty> owlAnnotationProperties = new ArrayList<OWLAnnotationProperty>();
+        Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
+                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(iriString)).findFirst();
+        if (optional.isPresent()) {
+            owlAnnotationProperties.add(optional.get());
+        }
+        return owlAnnotationProperties;
     }
 
     private Node getOrCreateWithUniqueFactory(String nodeName) {
