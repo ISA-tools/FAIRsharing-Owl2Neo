@@ -26,17 +26,7 @@ public class Neo4jQuery {
     public static void main(String[] args) {
 
         CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = null;
-
-        try {
-            cmd =  parser.parse(getOptions(), args);
-        } catch (ParseException e) {
-            System.err.println(e.getMessage());
-            e.printStackTrace();
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp(Owl2Neo4jLoader.class.getSimpleName(), getOptions());
-            System.exit(ERR_STATUS);
-        }
+        CommandLine cmd = Utils.parseCommandLine(getOptions(), args);
 
         String graphDbPath = cmd.getOptionValue("d", Owl2Neo4jLoader.GRAPH_DB_PATH);
         GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(graphDbPath));

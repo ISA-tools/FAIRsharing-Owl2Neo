@@ -24,9 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Owl2Neo4jLoader {
 
-    private static final int OK_STATUS = 0;
-    private static final int ERR_STATUS = 1;
-
     private static final String HASH = "#";
     private static final String GREATER_THAN = ">";
     private static final String IS_A = "isA";
@@ -389,17 +386,7 @@ public class Owl2Neo4jLoader {
     public static void main(String[] args) {
 
         CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = null;
-        try {
-            cmd =  parser.parse(getOptions(), args);
-        } catch (ParseException e) {
-            System.err.println(e.getMessage());
-            e.printStackTrace();
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp(Owl2Neo4jLoader.class.getSimpleName(), getOptions());
-            System.exit(ERR_STATUS);
-        }
-
+        CommandLine cmd = Utils.parseCommandLine(getOptions(), args);
 
         try {
             System.out.println("Deleting graph database directory");
@@ -430,28 +417,11 @@ public class Owl2Neo4jLoader {
             catch (Exception e) {
                 System.err.println("Exception caught: " + e.getMessage());
                 e.printStackTrace();
-                System.exit(ERR_STATUS);
+                System.exit(Utils.ERR_STATUS);
             }
         }
-        /*
-        String query = "MATCH (n) RETURN n ORDER BY ID(n) DESC LIMIT 30;";
-        try (Result result = graphDb.execute(query)) {
-            while (result.hasNext()) {
-                Map<String, Object> row = result.next();
-                for (String key : result.columns()) {
-                    Node node = (Node) row.get(key);
-                    Object name = node.getProperty("name");
-                    System.out.printf("%s = %s; name = %s%n", key, row.get(key), name);
-                }
-
-            }
-        }
-        catch (Exception e) {
-            System.err.println("Exception caught: " + e.getMessage());
-            e.printStackTrace();
-        } */
         System.out.println("Exiting with success...");
-        System.exit(OK_STATUS);
+        System.exit(Utils.OK_STATUS);
 
     }
 
