@@ -53,7 +53,7 @@ public class Owl2Neo4jLoader {
 
     private OWLAnnotationProperty oboAlternativeTerm;
     private List<OWLAnnotationProperty> alternativeTerms;
-    private List<OWLAnnotationProperty> synonyms;
+    private Map<String, OWLAnnotationProperty> synonyms;
 
     @Inject
     public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
@@ -104,6 +104,26 @@ public class Owl2Neo4jLoader {
         this.oboAlternativeTerm = oboAlternativeTerm;
     }
 
+    public void loadSynonymsFromOntology() {
+        String[] iris = { OIO_HAS_EXACT_SYNONYM,  OIO_HAS_RELATED_SYNONYM, OIO_HAS_BROAD_SYNONYM };
+        synonyms = new HashMap<String, OWLAnnotationProperty>();
+        for (String iri : iris) {
+            Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
+                    .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(iri)).findFirst();
+            if (optional.isPresent()) {
+                System.out.println("loadSynonymsFromOntology() - Synonym " + iri + " is: " + optional.get());
+                OWLAnnotationProperty synonym = optional.get();
+                String remainderString = synonym.getIRI().getRemainder().get();
+                System.out.println("loadSynonymsFromOntology() - Synonym " + remainderString + " is: " + optional.get());
+                 synonyms.put(remainderString, synonym);
+            }
+            else {
+                System.out.println("loadSynonymsFromOntology() - Synonym " + iri + " is not found in Ontology " + ontology);
+            }
+        }
+
+    }
+
     public void loadOboAlternativeTermFromOntology() {
         Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
                 .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(OBO_ALTERNATIVE_TERM_IRI)).findFirst();
@@ -120,7 +140,7 @@ public class Owl2Neo4jLoader {
         }
         else {
             System.out.println("OBO Alternative Term not found in Ontology " + ontology);
-            oboAlternativeTerm = null;
+            alternativeTerms = new ArrayList<>();
         }
     }
 
@@ -266,7 +286,7 @@ public class Owl2Neo4jLoader {
             final AtomicInteger counter = new AtomicInteger();
             long totalCount = ontology.classesInSignature().count();
             System.out.println("Total count is: " + totalCount);
-            ontology.classesInSignature().forEach(c -> {
+            ontology.classesInSignature().limit(50000).forEach(c -> {
                 long start = System.nanoTime();
                 loadClassAsNode(reasoner, thingNode, c, label);
                 long end = System.nanoTime();
@@ -412,6 +432,7 @@ public class Owl2Neo4jLoader {
                 String label = determineLabel(filePath);
                 System.out.println("Label is: " + label);
                 loader.loadOboAlternativeTermFromOntology();
+                loader.loadSynonymsFromOntology();
                 loader.importOntology(label);
             }
             catch (Exception e) {
