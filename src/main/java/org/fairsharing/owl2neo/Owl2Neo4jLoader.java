@@ -53,7 +53,7 @@ public class Owl2Neo4jLoader {
 
     private OWLAnnotationProperty oboAlternativeTerm;
     private List<OWLAnnotationProperty> alternativeTerms;
-    private Map<String, OWLAnnotationProperty> synonyms;
+    private Map<String, OWLAnnotationProperty> synonymMap;
 
     @Inject
     public Owl2Neo4jLoader(GraphDatabaseService graphDb, OWLOntology ontology, OWLDataFactory dataFactory) {
@@ -106,7 +106,7 @@ public class Owl2Neo4jLoader {
 
     public void loadSynonymsFromOntology() {
         String[] iris = { OIO_HAS_EXACT_SYNONYM,  OIO_HAS_RELATED_SYNONYM, OIO_HAS_BROAD_SYNONYM };
-        synonyms = new HashMap<String, OWLAnnotationProperty>();
+        synonymMap = new HashMap<String, OWLAnnotationProperty>();
         for (String iri : iris) {
             Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
                     .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(iri)).findFirst();
@@ -115,7 +115,7 @@ public class Owl2Neo4jLoader {
                 OWLAnnotationProperty synonym = optional.get();
                 String remainderString = synonym.getIRI().getRemainder().get();
                 System.out.println("loadSynonymsFromOntology() - Synonym " + remainderString + " is: " + optional.get());
-                 synonyms.put(remainderString, synonym);
+                 synonymMap.put(remainderString, synonym);
             }
             else {
                 System.out.println("loadSynonymsFromOntology() - Synonym " + iri + " is not found in Ontology " + ontology);
@@ -286,7 +286,7 @@ public class Owl2Neo4jLoader {
             final AtomicInteger counter = new AtomicInteger();
             long totalCount = ontology.classesInSignature().count();
             System.out.println("Total count is: " + totalCount);
-            ontology.classesInSignature().limit(50000).forEach(c -> {
+            ontology.classesInSignature().forEach(c -> {
                 long start = System.nanoTime();
                 loadClassAsNode(reasoner, thingNode, c, label);
                 long end = System.nanoTime();
@@ -351,6 +351,29 @@ public class Owl2Neo4jLoader {
                 });
 
             }
+
+            List<String> synonyms = new ArrayList<String>(), exactSynonyms = new ArrayList<String>(),
+                relatedSynonyms = new ArrayList<String>(), broadSynonyms = new ArrayList<String>();
+            for (Map.Entry<String, OWLAnnotationProperty> entry : synonymMap.entrySet()) {
+                EntitySearcher.getAnnotations(c, ontology, entry.getValue()).forEach(annotation -> {
+                    System.out.println("Found synonym of type " + entry.getKey() + ": " + annotation);
+                    OWLLiteral literal = (OWLLiteral) annotation.getValue();
+                    synonyms.add(literal.getLiteral());
+                    String propetyIRIString = entry.getValue().getIRI().getIRIString();
+                    switch (propetyIRIString) {
+                        case OIO_HAS_EXACT_SYNONYM:
+                            exactSynonyms.add(literal.getLiteral());
+                            break;
+                        case OIO_HAS_BROAD_SYNONYM:
+                            broadSynonyms.add(literal.getLiteral());
+                            break;
+                        case OIO_HAS_RELATED_SYNONYM:
+                            relatedSynonyms.add(literal.getLiteral());
+                            break;
+                    }
+                });
+            }
+
             String alternativeNamesString = String.join(",", alternativeNames);
             System.out.println("Alternative terms are: " + alternativeNamesString);
             System.out.println("Display name is: " + classNode.getProperty("displayName", null));
@@ -358,7 +381,10 @@ public class Owl2Neo4jLoader {
             // classNode.setProperty("alternativeNames", alternativeNamesString);
 
             classNode.setProperty("alternativeNames", alternativeNames.toArray(new String[alternativeNames.size()]));
-
+            classNode.setProperty("synonyms", synonyms.toArray(new String[synonyms.size()]));
+            classNode.setProperty("exactSynonyms", exactSynonyms.toArray(new String[exactSynonyms.size()]));
+            classNode.setProperty("broadSynonyns", broadSynonyms.toArray(new String[broadSynonyms.size()]));
+            classNode.setProperty("relatedSynonyms", relatedSynonyms.toArray(new String[relatedSynonyms.size()]));
             System.out.println("Current OWL class is: " + classString);
 
             NodeSet<OWLClass> superClasses = reasoner.getSuperClasses(c, true);
@@ -397,8 +423,8 @@ public class Owl2Neo4jLoader {
 
     protected static String determineLabel(String filename) {
         filename = filename.toLowerCase();
-        if (filename.contains("disciplines")) return "DISCIPLINE";
-        if (filename.contains("fairsharing")) return "DOMAIN";
+        if (filename.contains("disciplines") || filename.contains("srao")) return "DISCIPLINE";
+        if (filename.contains("fairsharing") || filename.contains("drao")) return "DOMAIN";
         if (filename.contains("taxon")) return "SPECIES";
         else return "GENERIC";
     }
