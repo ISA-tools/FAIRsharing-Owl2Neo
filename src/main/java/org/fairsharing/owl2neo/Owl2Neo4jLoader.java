@@ -1,5 +1,6 @@
 package org.fairsharing.owl2neo;
 
+import openllet.owlapi.OWL;
 import openllet.owlapi.OpenlletReasonerFactory;
 import org.apache.commons.cli.*;
 import org.apache.commons.io.FileUtils;
@@ -34,12 +35,17 @@ public class Owl2Neo4jLoader {
     private static final String OWL_THING = "owl:Thing";
 
     public static final String OPENLLET = "OPENLLET";
+
     public static final String PELLET = "PELLET";
     public static final String HERMIT = "HERMIT";
     public static final String JFACT = "JFACT";
 
+    public static final String IN_SUBJECT_VALUE_FAIRSHARING = "FAIRsharing";
+
+    private static final String IN_SUBJECT_IRI = "http://www.geneontology.org/formats/oboInOwl#inSubset";
+
     private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
-    private static final String FAIRSHARING_ALTERNATIVE_TERM = "http://www.fairsharing.org/fairsharing/FAIRO_0000001";
+    private static final String FAIRSHARING_ALTERNATIVE_TERM = "http://www.fairsharing.org/fairsharing/DRAO_0000001";
 
     private static final String OIO_HAS_EXACT_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym";
     private static final String OIO_HAS_RELATED_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym";
@@ -52,6 +58,7 @@ public class Owl2Neo4jLoader {
     private OWLReasoner reasoner;
 
     private OWLAnnotationProperty oboAlternativeTerm;
+    private OWLAnnotationProperty inSubject;
     private List<OWLAnnotationProperty> alternativeTerms;
     private Map<String, OWLAnnotationProperty> synonymMap;
 
@@ -68,6 +75,10 @@ public class Owl2Neo4jLoader {
 
     public void setGraphDb(GraphDatabaseService graphDb) {
         this.graphDb = graphDb;
+    }
+
+    public OWLAnnotationProperty getInSubject() {
+        return inSubject;
     }
 
     public OWLReasoner getReasoner() {
@@ -141,6 +152,19 @@ public class Owl2Neo4jLoader {
         else {
             System.out.println("OBO Alternative Term not found in Ontology " + ontology);
             alternativeTerms = new ArrayList<>();
+        }
+    }
+
+    public void loadInSubjectAnnotationProperty() {
+        Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
+                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(IN_SUBJECT_IRI)).findFirst();
+        if (optional.isPresent()) {
+            inSubject = optional.get();
+            System.out.println("InSubject property is: " + optional.get());
+        }
+        else {
+            System.out.println("InSubject property not found in Ontology: " + ontology);
+            inSubject = null;
         }
     }
 
@@ -374,6 +398,18 @@ public class Owl2Neo4jLoader {
                 });
             }
 
+            if (inSubject != null) {
+                EntitySearcher.getAnnotations(c, ontology, inSubject).forEach(annotation -> {
+                    String annotationLiteral = ((OWLLiteral) annotation.getValue()).getLiteral();
+                    if (annotationLiteral.equalsIgnoreCase(IN_SUBJECT_VALUE_FAIRSHARING)) {
+                        classNode.setProperty("isInSubjectFAIRsharing", true);
+                    }
+                });
+                if (classNode.getProperty("isInSubjectFAIRsharing", null) == null) {
+                    classNode.setProperty("isInSubjectFAIRsharing", false);
+                }
+            }
+
             String alternativeNamesString = String.join(",", alternativeNames);
             System.out.println("Alternative terms are: " + alternativeNamesString);
             System.out.println("Display name is: " + classNode.getProperty("displayName", null));
@@ -459,6 +495,7 @@ public class Owl2Neo4jLoader {
                 System.out.println("Label is: " + label);
                 loader.loadOboAlternativeTermFromOntology();
                 loader.loadSynonymsFromOntology();
+                loader.loadInSubjectAnnotationProperty();
                 loader.importOntology(label);
             }
             catch (Exception e) {
@@ -467,6 +504,7 @@ public class Owl2Neo4jLoader {
                 System.exit(Utils.ERR_STATUS);
             }
         }
+        graphDb.shutdown();
         System.out.println("Exiting with success...");
         System.exit(Utils.OK_STATUS);
 

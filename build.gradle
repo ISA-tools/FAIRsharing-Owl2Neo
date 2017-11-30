@@ -15,7 +15,7 @@ dependencies {
     compile group: 'commons-cli', name: 'commons-cli', version: '1.4'
 
     // https://mvnrepository.com/artifact/commons-io/commons-io
-    compile group: 'commons-io', name: 'commons-io', version: '2.5'
+    compile group: 'commons-io', name: 'commons-io', version: '2.6'
 
     // https://mvnrepository.com/artifact/com.google.dagger/dagger
     compile group: 'com.google.dagger', name: 'dagger', version: '2.11'
