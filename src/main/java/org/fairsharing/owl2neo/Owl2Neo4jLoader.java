@@ -1,6 +1,5 @@
 package org.fairsharing.owl2neo;
 
-import openllet.owlapi.OWL;
 import openllet.owlapi.OpenlletReasonerFactory;
 import org.apache.commons.cli.*;
 import org.apache.commons.io.FileUtils;
@@ -45,7 +44,8 @@ public class Owl2Neo4jLoader {
     private static final String IN_SUBJECT_IRI = "http://www.geneontology.org/formats/oboInOwl#inSubset";
 
     private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
-    private static final String FAIRSHARING_ALTERNATIVE_TERM = "http://www.fairsharing.org/fairsharing/DRAO_0000001";
+    private static final String OBO_DEFINITION_IRI = "http://purl.obolibrary.org/obo/IAO_0000115";
+    private static final String FAIRSHARING_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/DRAO_0000001";
 
     private static final String OIO_HAS_EXACT_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym";
     private static final String OIO_HAS_RELATED_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym";
@@ -58,8 +58,9 @@ public class Owl2Neo4jLoader {
     private OWLReasoner reasoner;
 
     private OWLAnnotationProperty oboAlternativeTerm;
+    private OWLAnnotationProperty definition;
     private OWLAnnotationProperty inSubject;
-    private List<OWLAnnotationProperty> alternativeTerms;
+    private Map<String, OWLAnnotationProperty> alternativeTermMap;
     private Map<String, OWLAnnotationProperty> synonymMap;
 
     @Inject
@@ -115,6 +116,14 @@ public class Owl2Neo4jLoader {
         this.oboAlternativeTerm = oboAlternativeTerm;
     }
 
+    public void createConstraints() {
+        System.out.println("createConstraints() - creating constraints...");
+        graphDb.execute("CREATE CONSTRAINT ON (discipline:DISCIPLINE) ASSERT discipline.iri IS UNIQUE;");
+        graphDb.execute("CREATE CONSTRAINT ON (domain:DOMAIN) ASSERT domain.iri IS UNIQUE;");
+        graphDb.execute("CREATE CONSTRAINT ON (udt:`USER DEFINED TAG`) ASSERT udt.name IS UNIQUE;");
+        System.out.println("createConstraints() - constraints created...");
+     }
+
     public void loadSynonymsFromOntology() {
         String[] iris = { OIO_HAS_EXACT_SYNONYM,  OIO_HAS_RELATED_SYNONYM, OIO_HAS_BROAD_SYNONYM };
         synonymMap = new HashMap<String, OWLAnnotationProperty>();
@@ -126,7 +135,7 @@ public class Owl2Neo4jLoader {
                 OWLAnnotationProperty synonym = optional.get();
                 String remainderString = synonym.getIRI().getRemainder().get();
                 System.out.println("loadSynonymsFromOntology() - Synonym " + remainderString + " is: " + optional.get());
-                 synonymMap.put(remainderString, synonym);
+                synonymMap.put(remainderString, synonym);
             }
             else {
                 System.out.println("loadSynonymsFromOntology() - Synonym " + iri + " is not found in Ontology " + ontology);
@@ -135,37 +144,45 @@ public class Owl2Neo4jLoader {
 
     }
 
-    public void loadOboAlternativeTermFromOntology() {
-        Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
-                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(OBO_ALTERNATIVE_TERM_IRI)).findFirst();
-        if (optional.isPresent()) {
-            System.out.println("OBO Alternative Term is: " + optional.get());
-            oboAlternativeTerm = optional.get();
-            List<OWLAnnotationProperty> subproperties = new ArrayList<OWLAnnotationProperty>(Arrays.asList(
-                    EntitySearcher.getSubProperties(oboAlternativeTerm, ontology).toArray(OWLAnnotationProperty[]::new)));
-            alternativeTerms = new ArrayList<OWLAnnotationProperty>();
-            alternativeTerms.add(oboAlternativeTerm);
-            alternativeTerms.addAll(subproperties);
-            System.out.println("Alternative Terms are: " + optional.get());
-
-        }
-        else {
-            System.out.println("OBO Alternative Term not found in Ontology " + ontology);
-            alternativeTerms = new ArrayList<>();
+    public void loadAlternativeTermsFromOntology() {
+        String[] iris = {FAIRSHARING_ALTERNATIVE_TERM_IRI, OBO_ALTERNATIVE_TERM_IRI };
+        alternativeTermMap = new HashMap<String, OWLAnnotationProperty>();
+        for (String iri : iris) {
+            Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
+                    .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(iri)).findFirst();
+            if (optional.isPresent()) {
+                System.out.println("loadAlternativeTermsFromOntology() - Alternative Term " + iri + " is: " + optional.get());
+                OWLAnnotationProperty synonym = optional.get();
+                String remainderString = synonym.getIRI().getRemainder().get();
+                System.out.println("loadAlternativeTermFromOntology() - Alternative Term " + remainderString + " is: " + optional.get());
+                alternativeTermMap.put(remainderString, synonym);
+            }
+            else {
+                System.out.println("loadAlternativeTermFromOntology() - Alternative Term " + iri + " is not found in Ontology " + ontology);
+            }
         }
     }
 
-    public void loadInSubjectAnnotationProperty() {
+    private OWLAnnotationProperty getAnnotationPropertyFromOntology(String annotationPropertyIri) {
+        OWLAnnotationProperty res = null;
         Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
-                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(IN_SUBJECT_IRI)).findFirst();
+                .filter((OWLAnnotationProperty ap) -> ap.getIRI().getIRIString().equalsIgnoreCase(annotationPropertyIri)).findFirst();
         if (optional.isPresent()) {
-            inSubject = optional.get();
+            res = optional.get();
             System.out.println("InSubject property is: " + optional.get());
         }
         else {
             System.out.println("InSubject property not found in Ontology: " + ontology);
-            inSubject = null;
         }
+        return res;
+    }
+
+    public void loadInSubjectAnnotationProperty() {
+        inSubject = getAnnotationPropertyFromOntology(IN_SUBJECT_IRI);
+    }
+
+    public void loadDefinitionAnnotationProperty() {
+        definition = getAnnotationPropertyFromOntology(OBO_DEFINITION_IRI);
     }
 
     public List<OWLAnnotationProperty> loadOWLAnnotationPropertyFromOntologyByIriString(String iriString) {
@@ -355,8 +372,8 @@ public class Owl2Neo4jLoader {
             });
 
             List<String> alternativeNames = new ArrayList<String>();
-            for (OWLAnnotationProperty alternativeTerm : alternativeTerms) {
-
+            for (Map.Entry<String, OWLAnnotationProperty> entry : alternativeTermMap.entrySet()) {
+                OWLAnnotationProperty alternativeTerm = entry.getValue();
                 EntitySearcher.getAnnotations(c, ontology, alternativeTerm).forEach(annotation -> {
                     System.out.println("Annotation alternative term: " + annotation);
                     OWLLiteral literal = (OWLLiteral) annotation.getValue();
@@ -365,7 +382,7 @@ public class Owl2Neo4jLoader {
                         case OBO_ALTERNATIVE_TERM_IRI:
                             alternativeNames.add(literal.getLiteral());
                             break;
-                        case FAIRSHARING_ALTERNATIVE_TERM:
+                        case FAIRSHARING_ALTERNATIVE_TERM_IRI:
                             alternativeNames.add(literal.getLiteral());
                             classNode.setProperty("displayName", literal.getLiteral());
                             break;
@@ -410,9 +427,21 @@ public class Owl2Neo4jLoader {
                 }
             }
 
+            if (definition != null) {
+                Optional<OWLAnnotation> opt = EntitySearcher.getAnnotations(c, ontology, definition).findFirst();
+                if (opt.isPresent()) {
+                    OWLAnnotation annotation = opt.get();
+                    String annotationLiteral = ((OWLLiteral) annotation.getValue()).getLiteral();
+                    classNode.setProperty("definition", annotationLiteral);
+                }
+            }
+
+
+
             String alternativeNamesString = String.join(",", alternativeNames);
             System.out.println("Alternative terms are: " + alternativeNamesString);
             System.out.println("Display name is: " + classNode.getProperty("displayName", null));
+            System.out.println("Definition is: " + classNode.getProperty("definition", null));
 
             // classNode.setProperty("alternativeNames", alternativeNamesString);
 
@@ -469,16 +498,16 @@ public class Owl2Neo4jLoader {
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = Utils.parseCommandLine(getOptions(), args);
+        String graphDbPath = cmd.getOptionValue("d", Owl2Neo4jLoader.GRAPH_DB_PATH);
 
         try {
             System.out.println("Deleting graph database directory");
-            FileUtils.deleteDirectory(new File(GRAPH_DB_PATH));
+            FileUtils.deleteDirectory(new File(graphDbPath));
         }
         catch (IOException e) {
             System.err.println("Exception caught: " + e.getMessage());
         }
 
-        String graphDbPath = cmd.getOptionValue("d", Owl2Neo4jLoader.GRAPH_DB_PATH);
         GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(graphDbPath));
         String[] owlFiles = cmd.getOptionValues("o");
 
@@ -491,11 +520,13 @@ public class Owl2Neo4jLoader {
                 OWLDataFactory factory = manager.getOWLDataFactory();
                 System.out.println("Loaded ontology" + ontology);
                 Owl2Neo4jLoader loader = new Owl2Neo4jLoader(graphDb, ontology, factory);
+                loader.createConstraints();
                 String label = determineLabel(filePath);
                 System.out.println("Label is: " + label);
-                loader.loadOboAlternativeTermFromOntology();
+                loader.loadAlternativeTermsFromOntology();
                 loader.loadSynonymsFromOntology();
                 loader.loadInSubjectAnnotationProperty();
+                loader.loadDefinitionAnnotationProperty();
                 loader.importOntology(label);
             }
             catch (Exception e) {

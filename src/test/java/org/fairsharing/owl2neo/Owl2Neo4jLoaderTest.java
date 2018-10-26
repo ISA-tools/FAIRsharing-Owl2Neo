@@ -76,7 +76,7 @@ public class Owl2Neo4jLoaderTest {
         // String graphDbPath = "";
         // GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(graphDbPath));
         String label = "DOMAIN";
-        loader.loadOboAlternativeTermFromOntology();
+        loader.loadAlternativeTermsFromOntology();
         loader.loadSynonymsFromOntology();
         loader.loadInSubjectAnnotationProperty();
         loader.importOntology(label);
