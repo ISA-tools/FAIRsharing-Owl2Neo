@@ -46,6 +46,13 @@ public class Owl2Neo4jLoader {
     private static final String OBO_ALTERNATIVE_TERM_IRI = "http://purl.obolibrary.org/obo/IAO_0000118";
     private static final String OBO_DEFINITION_IRI = "http://purl.obolibrary.org/obo/IAO_0000115";
     private static final String FAIRSHARING_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/DRAO_0000001";
+    private static final String RE_3_DATA_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000268";
+    private static final String EDAM_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000269";
+    private static final String OMIT_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000272";
+    private static final String NCIT_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000276";
+    private static final String AGRO_VOC_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000278";
+    private static final String AGRO_PORTAL_ALTERNATIVE_TERM_IRI = "http://www.fairsharing.org/ontology/SRAO_0000279";
+    private static final String PO_ALTERNATIVE_TERM = "http://www.fairsharing.org/ontology/SRAO_0000292";
 
     private static final String OIO_HAS_EXACT_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym";
     private static final String OIO_HAS_RELATED_SYNONYM = "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym";
@@ -145,7 +152,9 @@ public class Owl2Neo4jLoader {
     }
 
     public void loadAlternativeTermsFromOntology() {
-        String[] iris = {FAIRSHARING_ALTERNATIVE_TERM_IRI, OBO_ALTERNATIVE_TERM_IRI };
+        String[] iris = {FAIRSHARING_ALTERNATIVE_TERM_IRI, OBO_ALTERNATIVE_TERM_IRI, RE_3_DATA_ALTERNATIVE_TERM_IRI,
+        EDAM_ALTERNATIVE_TERM_IRI, OMIT_ALTERNATIVE_TERM_IRI, NCIT_ALTERNATIVE_TERM_IRI, AGRO_VOC_ALTERNATIVE_TERM_IRI,
+        AGRO_PORTAL_ALTERNATIVE_TERM_IRI, PO_ALTERNATIVE_TERM};
         alternativeTermMap = new HashMap<String, OWLAnnotationProperty>();
         for (String iri : iris) {
             Optional<OWLAnnotationProperty> optional = ontology.annotationPropertiesInSignature()
